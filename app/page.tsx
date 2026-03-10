@@ -20,10 +20,41 @@ const times = [
   { label: "1 hour+", value: 60 },
 ]
 
+interface Recipe {
+  title: string
+  description: string
+  cookTime: number
+  servings: number
+  ingredients: string[]
+  steps: string[]
+}
+
 export default function Home() {
   const [selectedMood, setSelectedMood] = useState("")
   const [selectedDiet, setSelectedDiet] = useState("None")
   const [selectedTime, setSelectedTime] = useState(0)
+  const [recipe, setRecipe] = useState<Recipe | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleGenerate() {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mood: selectedMood,
+          diet: selectedDiet,
+          time: selectedTime,
+        }),
+      })
+      const data = await response.json()
+      setRecipe(data)
+    } catch (error) {
+      console.error("Error generating recipe:", error)
+    }
+    setLoading(false)
+  }
 
   return (
     <main style={{ minHeight: "100vh", background: "linear-gradient(135deg, #f0fdfa 0%, #e0f2fe 100%)" }}>
@@ -137,7 +168,8 @@ export default function Home() {
 
         {/* Submit Button */}
         <button
-          disabled={!selectedMood || !selectedTime}
+          onClick={handleGenerate}
+          disabled={!selectedMood || !selectedTime || loading}
           style={{
             width: "100%",
             padding: "18px",
@@ -150,16 +182,59 @@ export default function Home() {
             color: selectedMood && selectedTime ? "white" : "#94a3b8",
             boxShadow: selectedMood && selectedTime ? "0 8px 24px rgba(13,148,136,0.4)" : "none",
             transition: "all 0.2s",
-            letterSpacing: "0.3px",
           }}
         >
-          🍽️ Find My Recipe
+          {loading ? "🍳 Cooking up your recipe..." : "🍽️ Find My Recipe"}
         </button>
 
         {(!selectedMood || !selectedTime) && (
           <p style={{ textAlign: "center", color: "#94a3b8", fontSize: "13px", marginTop: "12px" }}>
             Please select a mood and time to continue
           </p>
+        )}
+
+        {/* Recipe Result */}
+        {recipe && (
+          <div style={{ background: "white", borderRadius: "24px", padding: "32px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", marginTop: "28px" }}>
+            <h2 style={{ fontSize: "24px", fontWeight: "800", color: "#134e4a", marginBottom: "8px" }}>
+              {recipe.title}
+            </h2>
+            <p style={{ color: "#64748b", marginBottom: "20px" }}>{recipe.description}</p>
+
+            <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
+              <span style={{ background: "#f0fdfa", color: "#0d9488", padding: "6px 14px", borderRadius: "999px", fontSize: "13px", fontWeight: "600" }}>
+                ⏱️ {recipe.cookTime} mins
+              </span>
+              <span style={{ background: "#f0fdfa", color: "#0d9488", padding: "6px 14px", borderRadius: "999px", fontSize: "13px", fontWeight: "600" }}>
+                🍽️ {recipe.servings} servings
+              </span>
+            </div>
+
+            <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#134e4a", marginBottom: "12px" }}>
+              🛒 Ingredients
+            </h3>
+            <ul style={{ listStyle: "none", padding: 0, marginBottom: "24px" }}>
+              {recipe.ingredients.map((ing, i) => (
+                <li key={i} style={{ padding: "8px 0", borderBottom: "1px solid #f1f5f9", color: "#475569", fontSize: "14px" }}>
+                  • {ing}
+                </li>
+              ))}
+            </ul>
+
+            <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#134e4a", marginBottom: "12px" }}>
+              👨‍🍳 Instructions
+            </h3>
+            <ol style={{ listStyle: "none", padding: 0 }}>
+              {recipe.steps.map((step, i) => (
+                <li key={i} style={{ display: "flex", gap: "12px", padding: "10px 0", borderBottom: "1px solid #f1f5f9" }}>
+                  <span style={{ background: "linear-gradient(135deg, #0d9488, #0891b2)", color: "white", borderRadius: "50%", width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "700", flexShrink: 0 }}>
+                    {i + 1}
+                  </span>
+                  <span style={{ color: "#475569", fontSize: "14px" }}>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
 
       </div>
