@@ -1,6 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { supabase } from "../lib/supabase"
+import type { User } from "@supabase/supabase-js"
 
 const moods = [
   { emoji: "😊", label: "Happy" },
@@ -19,6 +22,25 @@ const fridgeItems = [
   { category: "Veggies", items: [{ label: "Onion", icon: "🧅" }, { label: "Garlic", icon: "🧄" }, { label: "Tomato", icon: "🍅" }, { label: "Spinach", icon: "🥬" }, { label: "Carrot", icon: "🥕" }, { label: "Bell Pepper", icon: "🫑" }, { label: "Broccoli", icon: "🥦" }, { label: "Potato", icon: "🥔" }, { label: "Mushrooms", icon: "🍄" }, { label: "Zucchini", icon: "🥒" }] },
   { category: "Pantry", items: [{ label: "Rice", icon: "🍚" }, { label: "Pasta", icon: "🍝" }, { label: "Bread", icon: "🍞" }, { label: "Oats", icon: "🌾" }, { label: "Canned Beans", icon: "🫘" }, { label: "Lentils", icon: "🟤" }] },
   { category: "Condiments", items: [{ label: "Soy Sauce", icon: "🫙" }, { label: "Olive Oil", icon: "🫒" }, { label: "Lemon", icon: "🍋" }, { label: "Hot Sauce", icon: "🌶️" }, { label: "Honey", icon: "🍯" }, { label: "Mustard", icon: "💛" }] },
+]
+
+const tickerDishes = [
+  { emoji: "🍜", name: "Spicy Ramen", rating: "4.9" },
+  { emoji: "🥑", name: "Avocado Toast", rating: "4.7" },
+  { emoji: "🍕", name: "Margherita Pizza", rating: "4.8" },
+  { emoji: "🍣", name: "Salmon Sushi", rating: "4.9" },
+  { emoji: "🥗", name: "Caesar Salad", rating: "4.6" },
+  { emoji: "🍝", name: "Carbonara", rating: "4.8" },
+  { emoji: "🌮", name: "Street Tacos", rating: "4.7" },
+  { emoji: "🍛", name: "Chicken Tikka Masala", rating: "4.9" },
+  { emoji: "🥩", name: "Ribeye Steak", rating: "4.8" },
+  { emoji: "🍱", name: "Bento Bowl", rating: "4.7" },
+  { emoji: "🫕", name: "Moroccan Tagine", rating: "4.8" },
+  { emoji: "🥘", name: "Seafood Paella", rating: "4.9" },
+  { emoji: "🍲", name: "Beef Bourguignon", rating: "4.8" },
+  { emoji: "🧆", name: "Falafel Wrap", rating: "4.6" },
+  { emoji: "🍤", name: "Tempura Shrimp", rating: "4.7" },
+  { emoji: "🥞", name: "Blueberry Pancakes", rating: "4.8" },
 ]
 
 const dietRestrictions: Record<string, string[]> = {
@@ -56,6 +78,106 @@ export default function Home() {
   const [dark, setDark] = useState(false)
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([])
   const [fridgeOpen, setFridgeOpen] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authError, setAuthError] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [quickEmoji, setQuickEmoji] = useState("🍕")
+  const [quickColorIndex, setQuickColorIndex] = useState(0)
+  const luckyBase = "Feeling Lucky?"
+
+  const quickEmojis = ["🍕","🍜","🌮","🍣","🥗","🍛","🥩","🍝","🧆","🥞","🍱","🫕","🍤","🥑","🍲","🌯"]
+  const quickColors = [
+    "linear-gradient(135deg, #f97316, #ef4444)",
+    "linear-gradient(135deg, #8b5cf6, #ec4899)",
+    "linear-gradient(135deg, #0d9488, #0891b2)",
+    "linear-gradient(135deg, #f59e0b, #f97316)",
+    "linear-gradient(135deg, #10b981, #0d9488)",
+    "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+  ]
+
+  useEffect(() => {
+    const emojiInterval = setInterval(() => {
+      setQuickEmoji(prev => {
+        const idx = quickEmojis.indexOf(prev)
+        return quickEmojis[(idx + 1) % quickEmojis.length]
+      })
+    }, 300)
+    const colorInterval = setInterval(() => {
+      setQuickColorIndex(prev => (prev + 1) % quickColors.length)
+    }, 1000)
+    return () => { clearInterval(emojiInterval); clearInterval(colorInterval) }
+  }, [])
+
+  function handleQuickPick() {
+    const randomMood = moods[Math.floor(Math.random() * moods.length)].label
+    const randomDiet = diets[Math.floor(Math.random() * diets.length)]
+    const randomTime = times[Math.floor(Math.random() * times.length)].value
+    setSelectedMood(randomMood)
+    setSelectedDiet(randomDiet)
+    setSelectedTime(randomTime)
+    setSaved(false)
+    setRecipe(null)
+    setTimeout(() => {
+      setLoading(true)
+      fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mood: randomMood, diet: randomDiet, time: randomTime, ingredients: selectedIngredients }),
+      })
+        .then(r => r.json())
+        .then(data => { setRecipe(data); setLoading(false) })
+        .catch(() => setLoading(false))
+    }, 100)
+  }
+  const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user)
+      setAuthChecked(true)
+    })
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  async function handleAuth() {
+    setAuthError("")
+    const { error } = authMode === "login"
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password })
+    if (error) { setAuthError(error.message); return }
+    setAuthOpen(false)
+    setEmail("")
+    setPassword("")
+  }
+
+  async function handleSave() {
+    if (!user || !recipe) return
+    setSaving(true)
+    await supabase.from("saved_recipes").insert({
+      user_id: user.id,
+      title: recipe.title,
+      description: recipe.description,
+      cook_time: recipe.cookTime,
+      servings: recipe.servings,
+      ingredients: recipe.ingredients,
+      steps: recipe.steps,
+      image_url: recipe.imageUrl,
+      mood: selectedMood,
+      diet: selectedDiet,
+    })
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
 
   function toggleIngredient(item: string) {
     setSelectedIngredients(prev =>
@@ -64,6 +186,83 @@ export default function Home() {
   }
 
   const d = dark
+
+  if (!authChecked) return null
+
+  if (!user) return (
+    <main style={{ minHeight: "100vh", background: "linear-gradient(135deg, #f0fdfa 0%, #e0f2fe 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "48px" }}>
+      {/* Ticker strip */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, overflow: "hidden", background: "#134e4a", padding: "10px 0", zIndex: 50 }}>
+        <div className="ticker-track">
+          {[...tickerDishes, ...tickerDishes].map((dish, i) => (
+            <div className="ticker-item" key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 32px", borderRight: "1px solid rgba(255,255,255,0.15)", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "18px" }}>{dish.emoji}</span>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: "white" }}>{dish.name}</span>
+              <span style={{ fontSize: "12px", color: "#5eead4", fontWeight: "700" }}>⭐ {dish.rating}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ textAlign: "center", marginBottom: "40px" }}>
+        <div style={{ fontSize: "64px", marginBottom: "16px" }}>🍽️</div>
+        <h1 style={{ fontSize: "36px", fontWeight: "800", color: "#134e4a", marginBottom: "8px" }}>Meal4Mood</h1>
+        <p style={{ color: "#64748b", fontSize: "16px" }}>AI-powered recipes based on how you feel</p>
+      </div>
+      <div style={{ background: "white", borderRadius: "24px", padding: "36px", width: "340px", boxShadow: "0 4px 24px rgba(0,0,0,0.1)" }}>
+        <h3 style={{ fontSize: "20px", fontWeight: "800", color: "#134e4a", marginBottom: "6px" }}>
+          {authMode === "login" ? "Welcome back 👋" : "Create account 🎉"}
+        </h3>
+        <p style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "24px" }}>
+          {authMode === "login" ? "Sign in to get started" : "Join to save your favourite recipes"}
+        </p>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#134e4a", fontSize: "14px", marginBottom: "10px", boxSizing: "border-box" }}
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleAuth()}
+          style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "#f8fafc", color: "#134e4a", fontSize: "14px", marginBottom: "16px", boxSizing: "border-box" }}
+        />
+        {authError && <p style={{ color: "#ef4444", fontSize: "13px", marginBottom: "12px" }}>{authError}</p>}
+        <button
+          onClick={handleAuth}
+          style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: "linear-gradient(135deg, #0d9488, #0891b2)", color: "white", fontSize: "15px", fontWeight: "800", cursor: "pointer", marginBottom: "14px" }}
+        >
+          {authMode === "login" ? "Sign in" : "Sign up"}
+        </button>
+        <p style={{ textAlign: "center", fontSize: "13px", color: "#94a3b8" }}>
+          {authMode === "login" ? "No account? " : "Already have one? "}
+          <span
+            onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError("") }}
+            style={{ color: "#0d9488", fontWeight: "700", cursor: "pointer" }}
+          >
+            {authMode === "login" ? "Sign up" : "Sign in"}
+          </span>
+        </p>
+      </div>
+
+      {/* Bottom ticker strip */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, overflow: "hidden", background: "#134e4a", padding: "10px 0", zIndex: 50 }}>
+        <div className="ticker-track" style={{ animationDirection: "reverse" }}>
+          {[...tickerDishes, ...tickerDishes].map((dish, i) => (
+            <div className="ticker-item" key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 32px", borderRight: "1px solid rgba(255,255,255,0.15)", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "18px" }}>{dish.emoji}</span>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: "white" }}>{dish.name}</span>
+              <span style={{ fontSize: "12px", color: "#5eead4", fontWeight: "700" }}>⭐ {dish.rating}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </main>
+  )
 
   async function handleGenerate() {
     setLoading(true)
@@ -106,21 +305,59 @@ export default function Home() {
         transition: "background 0.3s",
       }}>
         <span style={{ fontSize: "28px", fontWeight: "800", color: "#0d9488", letterSpacing: "-0.5px" }}>🍽️ Meal4Mood</span>
-        <button
-          onClick={() => setDark(!d)}
-          style={{
-            background: d ? "#334155" : "#f1f5f9",
-            border: "none",
-            borderRadius: "999px",
-            padding: "8px 16px",
-            cursor: "pointer",
-            fontSize: "18px",
-            transition: "background 0.2s",
-          }}
-        >
-          {d ? "☀️" : "🌙"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {user ? (
+            <>
+              <button
+                onClick={() => router.push("/saved")}
+                style={{ background: d ? "#334155" : "#f1f5f9", border: "none", borderRadius: "999px", padding: "8px 16px", cursor: "pointer", fontSize: "14px", fontWeight: "700", color: d ? "#f0fdfa" : "#475569" }}
+              >
+                📚 Saved
+              </button>
+              <button
+                onClick={() => supabase.auth.signOut()}
+                style={{ background: "none", border: `2px solid ${d ? "#334155" : "#e2e8f0"}`, borderRadius: "999px", padding: "8px 16px", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#94a3b8" }}
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => { setAuthMode("login"); setAuthOpen(true) }}
+              style={{ background: "linear-gradient(135deg, #0d9488, #0891b2)", border: "none", borderRadius: "999px", padding: "8px 20px", cursor: "pointer", fontSize: "14px", fontWeight: "700", color: "white" }}
+            >
+              Sign in
+            </button>
+          )}
+          <button
+            onClick={() => setDark(!d)}
+            style={{ background: d ? "#334155" : "#f1f5f9", border: "none", borderRadius: "999px", padding: "8px 16px", cursor: "pointer", fontSize: "18px", transition: "background 0.2s" }}
+          >
+            {d ? "☀️" : "🌙"}
+          </button>
+        </div>
       </nav>
+
+      {/* Quick Pick strip */}
+      <div
+        onClick={handleQuickPick}
+        style={{
+          background: quickColors[quickColorIndex],
+          overflow: "hidden",
+          cursor: "pointer",
+          transition: "background 0.8s ease",
+          padding: "12px 0",
+        }}
+      >
+        <div className="ticker-track">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="ticker-item" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 28px", borderRight: "1px solid rgba(255,255,255,0.2)", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "14px", fontWeight: "800", color: "white", letterSpacing: "0.5px" }}>⚡ {luckyBase}</span>
+              <span style={{ fontSize: "20px" }}>{quickEmoji}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div style={{ maxWidth: "560px", margin: "0 auto", padding: "48px 24px" }}>
 
@@ -262,10 +499,11 @@ export default function Home() {
             border: "none",
             fontSize: "18px",
             fontWeight: "800",
-            cursor: selectedMood && selectedTime ? "pointer" : "not-allowed",
-            background: selectedMood && selectedTime ? "linear-gradient(135deg, #0d9488, #0891b2)" : d ? "#1e293b" : "#e2e8f0",
-            color: selectedMood && selectedTime ? "white" : d ? "#475569" : "#94a3b8",
-            boxShadow: selectedMood && selectedTime ? "0 8px 24px rgba(13,148,136,0.4)" : "none",
+            cursor: loading ? "not-allowed" : selectedMood && selectedTime ? "pointer" : "not-allowed",
+            background: loading ? (d ? "#1e293b" : "#1a1a1a") : selectedMood && selectedTime ? "linear-gradient(135deg, #0d9488, #0891b2)" : d ? "#1e293b" : "#e2e8f0",
+            color: loading ? "#555" : selectedMood && selectedTime ? "white" : d ? "#475569" : "#94a3b8",
+            boxShadow: loading ? "none" : selectedMood && selectedTime ? "0 8px 24px rgba(13,148,136,0.4)" : "none",
+            opacity: loading ? 0.7 : 1,
             transition: "all 0.2s",
           }}
         >
@@ -296,9 +534,39 @@ export default function Home() {
               />
             )}
             <div style={{ padding: "32px" }}>
-            <h2 style={{ fontSize: "24px", fontWeight: "800", color: d ? "#f0fdfa" : "#134e4a", marginBottom: "8px" }}>
-              {recipe.title}
-            </h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+              <h2 style={{ fontSize: "24px", fontWeight: "800", color: d ? "#f0fdfa" : "#134e4a", margin: 0, flex: 1 }}>
+                {recipe.title}
+              </h2>
+              {user ? (
+                <button
+                  onClick={handleSave}
+                  disabled={saving || saved}
+                  style={{
+                    background: saved ? "#0d9488" : "linear-gradient(135deg, #0d9488, #0891b2)",
+                    border: "none",
+                    borderRadius: "12px",
+                    padding: "10px 18px",
+                    cursor: saving || saved ? "default" : "pointer",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "white",
+                    marginLeft: "12px",
+                    flexShrink: 0,
+                    transition: "all 0.2s",
+                  }}
+                >
+                  {saved ? "✓ Saved!" : saving ? "Saving..." : "💾 Save"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => { setAuthMode("login"); setAuthOpen(true) }}
+                  style={{ background: "none", border: "2px solid #e2e8f0", borderRadius: "12px", padding: "10px 18px", cursor: "pointer", fontSize: "13px", fontWeight: "700", color: "#94a3b8", marginLeft: "12px", flexShrink: 0 }}
+                >
+                  💾 Sign in to save
+                </button>
+              )}
+            </div>
             <p style={{ color: d ? "#94a3b8" : "#64748b", marginBottom: "20px" }}>{recipe.description}</p>
 
             <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
@@ -339,6 +607,56 @@ export default function Home() {
         )}
 
       </div>
+
+      {/* Auth modal */}
+      {authOpen && (
+        <>
+          <div onClick={() => setAuthOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200 }} />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            background: d ? "#1e293b" : "white", borderRadius: "24px", padding: "36px",
+            width: "340px", zIndex: 201, boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          }}>
+            <h3 style={{ fontSize: "22px", fontWeight: "800", color: d ? "#f0fdfa" : "#134e4a", marginBottom: "6px" }}>
+              {authMode === "login" ? "Welcome back 👋" : "Create account 🎉"}
+            </h3>
+            <p style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "24px" }}>
+              {authMode === "login" ? "Sign in to save your recipes" : "Start saving your favourite recipes"}
+            </p>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: `1.5px solid ${d ? "#334155" : "#e2e8f0"}`, background: d ? "#0f172a" : "#f8fafc", color: d ? "#f0fdfa" : "#134e4a", fontSize: "14px", marginBottom: "10px", boxSizing: "border-box" }}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAuth()}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: "12px", border: `1.5px solid ${d ? "#334155" : "#e2e8f0"}`, background: d ? "#0f172a" : "#f8fafc", color: d ? "#f0fdfa" : "#134e4a", fontSize: "14px", marginBottom: "16px", boxSizing: "border-box" }}
+            />
+            {authError && <p style={{ color: "#ef4444", fontSize: "13px", marginBottom: "12px" }}>{authError}</p>}
+            <button
+              onClick={handleAuth}
+              style={{ width: "100%", padding: "14px", borderRadius: "12px", border: "none", background: "linear-gradient(135deg, #0d9488, #0891b2)", color: "white", fontSize: "15px", fontWeight: "800", cursor: "pointer", marginBottom: "14px" }}
+            >
+              {authMode === "login" ? "Sign in" : "Sign up"}
+            </button>
+            <p style={{ textAlign: "center", fontSize: "13px", color: "#94a3b8" }}>
+              {authMode === "login" ? "No account? " : "Already have one? "}
+              <span
+                onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError("") }}
+                style={{ color: "#0d9488", fontWeight: "700", cursor: "pointer" }}
+              >
+                {authMode === "login" ? "Sign up" : "Sign in"}
+              </span>
+            </p>
+          </div>
+        </>
+      )}
 
       {/* Fridge toggle button */}
       <button

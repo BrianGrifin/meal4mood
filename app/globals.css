@@ -12,3 +12,19 @@ body {
   background-color: #f8fafc;
   font-family: Arial, sans-serif;
 }
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-track {
+  display: flex;
+  flex-wrap: nowrap;
+  animation: ticker 40s linear infinite;
+  width: max-content;
+}
+
+.ticker-item {
+  flex-shrink: 0;
+}
