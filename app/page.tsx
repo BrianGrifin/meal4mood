@@ -88,18 +88,8 @@ export default function Home() {
   const [saved, setSaved] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
   const [quickEmoji, setQuickEmoji] = useState("🍕")
-  const [quickColorIndex, setQuickColorIndex] = useState(0)
   const luckyBase = "Feeling Lucky?"
-
   const quickEmojis = ["🍕","🍜","🌮","🍣","🥗","🍛","🥩","🍝","🧆","🥞","🍱","🫕","🍤","🥑","🍲","🌯"]
-  const quickColors = [
-    "linear-gradient(135deg, #f97316, #ef4444)",
-    "linear-gradient(135deg, #8b5cf6, #ec4899)",
-    "linear-gradient(135deg, #0d9488, #0891b2)",
-    "linear-gradient(135deg, #f59e0b, #f97316)",
-    "linear-gradient(135deg, #10b981, #0d9488)",
-    "linear-gradient(135deg, #3b82f6, #8b5cf6)",
-  ]
 
   useEffect(() => {
     const emojiInterval = setInterval(() => {
@@ -108,10 +98,7 @@ export default function Home() {
         return quickEmojis[(idx + 1) % quickEmojis.length]
       })
     }, 300)
-    const colorInterval = setInterval(() => {
-      setQuickColorIndex(prev => (prev + 1) % quickColors.length)
-    }, 1000)
-    return () => { clearInterval(emojiInterval); clearInterval(colorInterval) }
+    return () => clearInterval(emojiInterval)
   }, [])
 
   function handleQuickPick() {
@@ -342,15 +329,14 @@ export default function Home() {
       <div
         onClick={handleQuickPick}
         style={{
-          background: quickColors[quickColorIndex],
+          background: "#134e4a",
           overflow: "hidden",
           cursor: "pointer",
-          transition: "background 0.8s ease",
           padding: "12px 0",
         }}
       >
-        <div className="ticker-track">
-          {Array.from({ length: 12 }).map((_, i) => (
+        <div className="ticker-track-fast">
+          {[...Array.from({ length: 20 }), ...Array.from({ length: 20 })].map((_, i) => (
             <div key={i} className="ticker-item" style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 28px", borderRight: "1px solid rgba(255,255,255,0.2)", whiteSpace: "nowrap" }}>
               <span style={{ fontSize: "14px", fontWeight: "800", color: "white", letterSpacing: "0.5px" }}>⚡ {luckyBase}</span>
               <span style={{ fontSize: "20px" }}>{quickEmoji}</span>

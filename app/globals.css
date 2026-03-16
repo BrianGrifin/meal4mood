@@ -20,9 +20,20 @@ body {
 
 .ticker-track {
   display: flex;
+  flex-direction: row;
   flex-wrap: nowrap;
   animation: ticker 40s linear infinite;
   width: max-content;
+  white-space: nowrap;
+}
+
+.ticker-track-fast {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  animation: ticker 70s linear infinite;
+  width: max-content;
+  white-space: nowrap;
 }
 
 .ticker-item {
