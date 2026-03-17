@@ -45,9 +45,13 @@ Respond in this exact JSON format with no extra text:
 
     const content = message.content[0]
     if (content.type === "text") {
-      console.log("Claude response:", content.text)
-      const clean = content.text.replace(/```json|```/g, "").trim()
-      const recipe = JSON.parse(clean)
+      let recipe
+      try {
+        const clean = content.text.replace(/```json|```/g, "").trim()
+        recipe = JSON.parse(clean)
+      } catch {
+        return NextResponse.json({ error: "Failed to parse recipe from AI response" }, { status: 500 })
+      }
 
       // Fetch a food photo from Unsplash
       let imageUrl = null

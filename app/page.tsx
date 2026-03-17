@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../lib/supabase"
+import { getIngredientEmoji } from "../lib/utils"
 import type { User } from "@supabase/supabase-js"
 
 const moods = [
@@ -15,6 +16,7 @@ const moods = [
 ]
 
 const diets = ["None", "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free", "Keto"]
+
 
 const fridgeItems = [
   { category: "Protein", items: [{ label: "Eggs", icon: "🥚" }, { label: "Chicken", icon: "🍗" }, { label: "Beef", icon: "🥩" }, { label: "Tofu", icon: "🧆" }, { label: "Shrimp", icon: "🍤" }, { label: "Canned Tuna", icon: "🐟" }, { label: "Bacon", icon: "🥓" }] },
@@ -75,9 +77,13 @@ export default function Home() {
   const [selectedTime, setSelectedTime] = useState(0)
   const [recipe, setRecipe] = useState<Recipe | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [dark, setDark] = useState(false)
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([])
   const [fridgeOpen, setFridgeOpen] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [groceryOpen, setGroceryOpen] = useState(false)
+  const [groceryChecked, setGroceryChecked] = useState<Set<number>>(new Set())
   const [user, setUser] = useState<User | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
@@ -90,6 +96,48 @@ export default function Home() {
   const [quickEmoji, setQuickEmoji] = useState("🍕")
   const luckyBase = "Feeling Lucky?"
   const quickEmojis = ["🍕","🍜","🌮","🍣","🥗","🍛","🥩","🍝","🧆","🥞","🍱","🫕","🍤","🥑","🍲","🌯"]
+
+  const handleFridgeScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setScanning(true)
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const image = reader.result as string
+      try {
+        const res = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image }) })
+        const data = await res.json()
+        if (data.ingredients) {
+          const allLabels = fridgeItems.flatMap(g => g.items.map(i => i.label))
+          const matched = data.ingredients
+            .map((ing: string) => {
+              const ingLower = ing.toLowerCase()
+              return allLabels.find(label => {
+                const labelLower = label.toLowerCase()
+                return ingLower === labelLower || ingLower.includes(labelLower) || labelLower.includes(ingLower)
+              })
+            })
+            .filter(Boolean) as string[]
+          setSelectedIngredients(prev => [...new Set([...prev, ...matched])])
+        }
+      } catch {
+        setError("Scan failed. Please try a clearer photo.")
+      } finally {
+        setScanning(false)
+        e.target.value = ""
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  useEffect(() => {
+    const stored = localStorage.getItem("meal4mood-dark")
+    if (stored === "true") setDark(true)
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem("meal4mood-dark", String(dark))
+  }, [dark])
 
   useEffect(() => {
     const emojiInterval = setInterval(() => {
@@ -118,7 +166,7 @@ export default function Home() {
         body: JSON.stringify({ mood: randomMood, diet: randomDiet, time: randomTime, ingredients: selectedIngredients }),
       })
         .then(r => r.json())
-        .then(data => { setRecipe(data); setLoading(false) })
+        .then(data => { setRecipe(data); setLoading(false); setGroceryChecked(new Set()); setGroceryOpen(false) })
         .catch(() => setLoading(false))
     }, 100)
   }
@@ -177,7 +225,7 @@ export default function Home() {
   if (!authChecked) return null
 
   if (!user) return (
-    <main style={{ minHeight: "100vh", background: "linear-gradient(135deg, #f0fdfa 0%, #e0f2fe 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "48px" }}>
+    <main style={{ minHeight: "100vh", background: "linear-gradient(135deg, #f0fdfa 0%, #e0f2fe 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", paddingTop: "0px", marginTop: "-80px" }}>
       {/* Ticker strip */}
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, overflow: "hidden", background: "#134e4a", padding: "10px 0", zIndex: 50 }}>
         <div className="ticker-track">
@@ -190,10 +238,8 @@ export default function Home() {
           ))}
         </div>
       </div>
-      <div style={{ textAlign: "center", marginBottom: "40px" }}>
-        <div style={{ fontSize: "64px", marginBottom: "16px" }}>🍽️</div>
-        <h1 style={{ fontSize: "36px", fontWeight: "800", color: "#134e4a", marginBottom: "8px" }}>Meal4Mood</h1>
-        <p style={{ color: "#64748b", fontSize: "16px" }}>AI-powered recipes based on how you feel</p>
+      <div style={{ textAlign: "center", marginBottom: "-60px" }}>
+        <img src="/logo.png" alt="Meal4Mood logo" style={{ width: "480px", height: "480px", objectFit: "contain", display: "block", margin: "0 auto" }} />
       </div>
       <div style={{ background: "white", borderRadius: "24px", padding: "36px", width: "340px", boxShadow: "0 4px 24px rgba(0,0,0,0.1)" }}>
         <h3 style={{ fontSize: "20px", fontWeight: "800", color: "#134e4a", marginBottom: "6px" }}>
@@ -253,6 +299,7 @@ export default function Home() {
 
   async function handleGenerate() {
     setLoading(true)
+    setError(null)
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -265,9 +312,13 @@ export default function Home() {
         }),
       })
       const data = await response.json()
-      setRecipe(data)
-    } catch (error) {
-      console.error("Error generating recipe:", error)
+      if (!response.ok) {
+        setError(data.error || "Failed to generate recipe. Please try again.")
+      } else {
+        setRecipe(data); setGroceryChecked(new Set()); setGroceryOpen(false)
+      }
+    } catch {
+      setError("Network error. Please check your connection and try again.")
     }
     setLoading(false)
   }
@@ -318,6 +369,7 @@ export default function Home() {
           )}
           <button
             onClick={() => setDark(!d)}
+            aria-label={d ? "Switch to light mode" : "Switch to dark mode"}
             style={{ background: d ? "#334155" : "#f1f5f9", border: "none", borderRadius: "999px", padding: "8px 16px", cursor: "pointer", fontSize: "18px", transition: "background 0.2s" }}
           >
             {d ? "☀️" : "🌙"}
@@ -478,6 +530,8 @@ export default function Home() {
         <button
           onClick={handleGenerate}
           disabled={!selectedMood || !selectedTime || loading}
+          aria-busy={loading}
+          aria-label={loading ? "Generating recipe, please wait" : "Find my recipe"}
           style={{
             width: "100%",
             padding: "18px",
@@ -500,6 +554,33 @@ export default function Home() {
           <p style={{ textAlign: "center", color: d ? "#475569" : "#94a3b8", fontSize: "13px", marginTop: "12px" }}>
             Please select a mood and time to continue
           </p>
+        )}
+
+        {/* Error banner */}
+        {error && (
+          <div role="alert" style={{ marginTop: "16px", padding: "14px 18px", borderRadius: "12px", background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: "14px", fontWeight: "600", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>⚠️ {error}</span>
+            <button onClick={() => setError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: "16px" }} aria-label="Dismiss error">✕</button>
+          </div>
+        )}
+
+        {/* Skeleton loader */}
+        {loading && (
+          <div style={{ background: d ? "#1e293b" : "white", borderRadius: "24px", overflow: "hidden", boxShadow: d ? "0 4px 20px rgba(0,0,0,0.3)" : "0 4px 20px rgba(0,0,0,0.08)", marginTop: "28px" }}>
+            <div className="skeleton" style={{ width: "100%", height: "220px" }} />
+            <div style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div className="skeleton" style={{ height: "28px", width: "60%", borderRadius: "8px" }} />
+              <div className="skeleton" style={{ height: "16px", width: "90%", borderRadius: "8px" }} />
+              <div className="skeleton" style={{ height: "16px", width: "75%", borderRadius: "8px" }} />
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div className="skeleton" style={{ height: "32px", width: "100px", borderRadius: "999px" }} />
+                <div className="skeleton" style={{ height: "32px", width: "100px", borderRadius: "999px" }} />
+              </div>
+              <div className="skeleton" style={{ height: "16px", width: "100%", borderRadius: "8px" }} />
+              <div className="skeleton" style={{ height: "16px", width: "85%", borderRadius: "8px" }} />
+              <div className="skeleton" style={{ height: "16px", width: "90%", borderRadius: "8px" }} />
+            </div>
+          </div>
         )}
 
         {/* Recipe Result */}
@@ -588,6 +669,42 @@ export default function Home() {
                 </li>
               ))}
             </ol>
+
+            {/* Grocery List */}
+            <button
+              onClick={() => setGroceryOpen(o => !o)}
+              aria-expanded={groceryOpen}
+              aria-label={groceryOpen ? "Hide grocery list" : "Show grocery list"}
+              style={{ marginTop: "24px", width: "100%", padding: "12px", background: d ? "#0f3d3a" : "#f0fdfa", border: `1px solid ${d ? "#0d9488" : "#ccfbf1"}`, borderRadius: "12px", cursor: "pointer", fontSize: "14px", fontWeight: "700", color: "#0d9488", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+            >
+              <span>🛒 Grocery List</span>
+              <span>{groceryOpen ? "▲" : "▼"}</span>
+            </button>
+            {groceryOpen && (
+              <div style={{ marginTop: "8px", background: d ? "#0f172a" : "#f8fafc", borderRadius: "12px", padding: "16px" }}>
+                <p style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "12px", fontWeight: "600" }}>
+                  {groceryChecked.size}/{recipe.ingredients.length} items checked
+                </p>
+                {recipe.ingredients.map((ing, i) => (
+                  <label key={i} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "8px 0", borderBottom: `1px solid ${d ? "#1e293b" : "#f1f5f9"}`, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={groceryChecked.has(i)}
+                      onChange={() => setGroceryChecked(prev => {
+                        const next = new Set(prev)
+                        next.has(i) ? next.delete(i) : next.add(i)
+                        return next
+                      })}
+                      style={{ width: "16px", height: "16px", accentColor: "#0d9488" }}
+                    />
+                    <span style={{ fontSize: "16px" }}>{getIngredientEmoji(ing)}</span>
+                    <span style={{ color: groceryChecked.has(i) ? "#94a3b8" : (d ? "#cbd5e1" : "#475569"), fontSize: "14px", textDecoration: groceryChecked.has(i) ? "line-through" : "none" }}>
+                      {ing}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
             </div>
           </div>
         )}
@@ -702,15 +819,19 @@ export default function Home() {
             <div style={{ padding: "20px 24px", borderBottom: `1px solid ${d ? "#334155" : "#f1f5f9"}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <h3 style={{ fontSize: "18px", fontWeight: "800", color: d ? "#f0fdfa" : "#134e4a", margin: 0 }}>🧊 My Fridge</h3>
-                <p style={{ fontSize: "12px", color: "#94a3b8", margin: "4px 0 0" }}>Check what you have</p>
+                <p style={{ fontSize: "12px", color: "#94a3b8", margin: "4px 0 0" }}>{scanning ? "Scanning..." : "Check what you have"}</p>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <label style={{ cursor: scanning ? "not-allowed" : "pointer", background: d ? "#0f3d3a" : "#f0fdfa", border: "none", borderRadius: "8px", width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }} title="Scan fridge photo">
+                  {scanning ? "⏳" : "📷"}
+                  <input type="file" accept="image/*" capture="environment" onChange={handleFridgeScan} style={{ display: "none" }} disabled={scanning} />
+                </label>
                 {selectedIngredients.length > 0 && (
                   <button onClick={() => setSelectedIngredients([])} style={{ fontSize: "12px", color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>
                     Clear all
                   </button>
                 )}
-                <button onClick={() => setFridgeOpen(false)} style={{ background: d ? "#334155" : "#f1f5f9", border: "none", borderRadius: "8px", width: "32px", height: "32px", cursor: "pointer", fontSize: "16px" }}>
+                <button onClick={() => setFridgeOpen(false)} aria-label="Close fridge panel" style={{ background: d ? "#334155" : "#f1f5f9", border: "none", borderRadius: "8px", width: "32px", height: "32px", cursor: "pointer", fontSize: "16px" }}>
                   ✕
                 </button>
               </div>
